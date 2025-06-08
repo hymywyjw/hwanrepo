@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Photo Booth - Junghwan Ver</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Variabel CSS untuk kemudahan pengaturan tema dan responsivitas */
+      :root {
+        --primary-color: rgb(26, 23, 24); /* Warna utama: hitam gelap */
+        --secondary-color: #fff8e1; /* Warna sekunder: krem terang */
+        --accent-color: #ff6f61; /* Warna aksen: merah karang cerah */
+        --text-color: #333; /* Warna teks: abu-abu gelap */
+        --border-radius: 20px; /* Radius sudut untuk elemen */
+        --box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); /* Bayangan elemen */
+        --dynamic-video-aspect-ratio: 0.5625; /* Rasio aspek default 9:16 (potret). Akan diperbarui oleh JS sesuai rasio kamera */
+      }
+
+      /* Pengaturan dasar body */
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--secondary-color);
+        font-family: "Quicksand", sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh; /* Tinggi minimal 100% viewport */
+        overflow-x: hidden; /* Mencegah scrollbar horizontal */
+        color: var(--text-color);
+        line-height: 1.6;
+        box-sizing: border-box; /* Memastikan padding dan border termasuk dalam lebar/tinggi elemen */
+      }
+
+      /* Gaya untuk judul H1 */
+      h1 {
+        font-family: "Pacifico", cursive;
+        color: var(--primary-color);
+        margin: 20px 0 30px;
+        font-size: 3em;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      /* Kontainer utama untuk video dan photostrip */
+      .container {
+        display: flex;
+        flex-wrap: wrap; /* Memungkinkan wrap ke baris baru pada layar kecil */
+        gap: 40px; /* Jarak antar elemen */
+        justify-content: center; /* Pusatkan elemen secara horizontal */
+        align-items: flex-start; /* Elemen sejajar dari atas */
+        margin-bottom: 20px;
+        width: 100%; /* Lebar penuh pada layar kecil */
+        padding: 0 15px; /* Padding di sisi */
+        box-sizing: border-box;
+      }
+
+      /* Kontainer untuk video kamera */
+      .video-container {
+        position: relative;
+        width: 100%; /* Lebar default 100% untuk mobile-first */
+        max-width: 565px; /* Lebar maksimal di layar besar */
+        /* Teknik aspect ratio box: padding-top dihitung berdasarkan rasio aspek video */
+        padding-top: calc(100% / var(--dynamic-video-aspect-ratio));
+        height: 0; /* Penting saat menggunakan padding-top untuk rasio aspek */
+        border: 6px solid var(--primary-color);
+        border-radius: var(--border-radius);
+        overflow: hidden; /* Sembunyikan konten yang meluap */
+        background: #000; /* Latar belakang hitam jika video belum load */
+        box-shadow: var(--box-shadow);
+        flex-shrink: 0; /* Mencegah kontainer mengecil */
+      }
+
+      /* Posisi semua overlay (video, frame, stiker, countdown) agar menutupi kontainer video */
+      .video-container video,
+      .video-container #frameOverlay,
+      .video-container #sticker,
+      .video-container #countdown {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Gaya untuk elemen video */
+      video {
+        object-fit: contain; /* Video akan diskalakan untuk muat tanpa pemotongan */
+        background-color: black; /* Mengisi area letterbox dengan warna hitam */
+        transform: scaleX(-1); /* Efek cermin */
+      }
+
+      /* Gaya untuk overlay frame */
+      #frameOverlay {
+        opacity: 0.9;
+        z-index: 3;
+        object-fit: contain; /* Frame diskalakan untuk muat tanpa distorsi */
+        pointer-events: none; /* Memungkinkan klik melewati frame */
+      }
+
+      /* Gaya untuk stiker */
+      #sticker {
+        z-index: 2;
+        object-fit: contain; /* Stiker mempertahankan rasio aspeknya */
+        pointer-events: none; /* Memungkinkan klik melewati stiker */
+        /* Penempatan dan ukuran stiker ditangani oleh JavaScript untuk kontrol yang tepat */
+      }
+
+      /* Gaya untuk countdown */
+      #countdown {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 90px;
+        color: rgb(255, 208, 0); /* Kuning cerah */
+        font-weight: bold;
+        text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.3);
+        display: none; /* Tersembunyi secara default */
+        z-index: 4;
+        animation: pulse 1s infinite alternate; /* Animasi berdenyut */
+        pointer-events: none;
+      }
+
+      /* Keyframes untuk animasi denyut */
+      @keyframes pulse {
+        from {
+          transform: scale(1);
+          opacity: 1;
+        }
+        to {
+          transform: scale(1.1);
+          opacity: 0.8;
+        }
+      }
+
+      /* Gaya untuk strip foto (preview) */
+      .strip {
+        display: flex;
+        flex-direction: column; /* Vertikal di desktop */
+        gap: 10px;
+        border: 6px solid var(--primary-color);
+        border-radius: var(--border-radius);
+        background: #fdc428; /* Latar belakang oranye-kuning */
+        padding: 15px;
+        box-shadow: var(--box-shadow);
+        width: 100%; /* Lebar default 100% untuk mobile */
+        max-width: 200px; /* Lebar maksimal di desktop */
+        min-width: 150px; /* Lebar minimal untuk keterbacaan */
+        box-sizing: border-box;
+      }
+
+      /* Gaya untuk gambar di strip foto */
+      .strip img {
+        width: 100%; /* Mengambil lebar penuh dari parent (.strip) */
+        height: auto; /* Tinggi menyesuaikan untuk mempertahankan rasio aspek */
+        aspect-ratio: var(
+          --dynamic-video-aspect-ratio
+        ); /* Penting: mempertahankan rasio aspek video */
+        object-fit: contain; /* Memastikan seluruh gambar terlihat, tanpa pemotongan */
+        background-color: #eee; /* Latar belakang untuk letterboxing jika rasio aspek berbeda */
+        border-radius: 10px;
+        border: 1px solid #eee;
+        transition: transform 0.2s ease-in-out;
+      }
+
+      /* Efek hover untuk gambar strip */
+      .strip img:hover {
+        transform: scale(1.03);
+      }
+
+      /* Gaya untuk kontrol (tombol) */
+      .controls {
+        margin: 30px 0;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+        width: 100%;
+        padding: 0 15px;
+        box-sizing: border-box;
+      }
+
+      /* Gaya untuk tombol */
+      button {
+        background: var(--primary-color);
+        color: #fff;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 30px;
+        cursor: pointer;
+        font-size: 1.1em;
+        font-weight: bold;
+        transition: background 0.3s ease, transform 0.2s ease,
+          box-shadow 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        min-width: 180px; /* Lebar minimal tombol */
+      }
+
+      /* Efek hover untuk tombol */
+      button:hover {
+        background: var(--accent-color);
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      /* Efek active untuk tombol */
+      button:active {
+        transform: translateY(1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Gaya untuk panel opsi (stiker, timer, frame) */
+      .options-panel {
+        background: #fff;
+        border: 4px solid var(--primary-color);
+        border-radius: var(--border-radius);
+        padding: 20px;
+        margin-top: 20px;
+        margin-bottom: 30px;
+        box-shadow: var(--box-shadow);
+        text-align: center;
+        width: 90%;
+        max-width: 700px;
+        pointer-events: auto;
+        box-sizing: border-box;
+      }
+
+      /* Gaya untuk judul di panel opsi */
+      .options-panel h3 {
+        color: var(--primary-color);
+        margin-bottom: 15px;
+        font-size: 1.5em;
+      }
+
+      /* Gaya untuk seleksi stiker, timer, dan frame */
+      .sticker-selection,
+      .timer-selection,
+      .frame-selection {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 20px;
+        pointer-events: auto;
+      }
+
+      /* Gaya untuk gambar stiker dalam seleksi */
+      .sticker-selection img {
+        width: 60px;
+        height: 60px;
+        object-fit: contain;
+        border: 3px solid transparent;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      /* Efek hover untuk gambar stiker */
+      .sticker-selection img:hover {
+        transform: scale(1.1);
+      }
+
+      /* Gaya untuk stiker yang terpilih */
+      .sticker-selection img.selected {
+        border-color: var(--accent-color);
+        transform: scale(1.1);
+        box-shadow: 0 0 10px rgba(255, 111, 97, 0.5);
+      }
+
+      /* Gaya untuk gambar frame dan tombol 'Tidak ada' */
+      .frame-selection img,
+      .frame-selection button {
+        width: 80px; /* Ukuran lebih besar untuk preview frame */
+        height: 80px;
+        object-fit: contain;
+        border: 3px solid transparent;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: transform 0.2s ease, border-color 0.2s ease,
+          background 0.2s ease;
+        background-color: #f0f0f0; /* Latar belakang terang untuk konsistensi */
+        display: flex; /* Untuk memusatkan teks jika itu tombol */
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9em;
+        color: var(--text-color);
+        box-sizing: border-box;
+      }
+
+      /* Efek hover untuk frame */
+      .frame-selection img:hover,
+      .frame-selection button:hover {
+        transform: scale(1.1);
+      }
+
+      /* Gaya untuk frame yang terpilih */
+      .frame-selection img.selected,
+      .frame-selection button.selected {
+        border-color: var(--accent-color);
+        transform: scale(1.1);
+        box-shadow: 0 0 10px rgba(255, 111, 97, 0.5);
+        background-color: var(--secondary-color); /* Sorot frame yang terpilih */
+      }
+
+      /* Gaya untuk tombol timer */
+      .timer-selection button {
+        background: #eee;
+        color: var(--text-color);
+        border: 2px solid var(--primary-color);
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 0.9em;
+        font-weight: normal;
+        transition: background 0.2s ease, color 0.2s ease;
+        min-width: unset; /* Override min-width dari gaya tombol umum */
+      }
+
+      /* Gaya untuk tombol timer yang terpilih */
+      .timer-selection button.selected {
+        background: var(--primary-color);
+        color: #fff;
+      }
+
+      /* Gaya untuk informasi timer */
+      .timer-info {
+        font-size: 1.1em;
+        color: var(--text-color);
+        margin-top: 10px;
+      }
+
+      /* Media Queries untuk Responsivitas */
+
+      /* Mobile (layar kecil hingga menengah) */
+      @media (max-width: 600px) {
+        h1 {
+          font-size: 2em;
+          margin: 15px 0 20px;
+        }
+
+        .container {
+          flex-direction: column; /* Susun video dan strip secara vertikal */
+          align-items: center;
+          gap: 20px;
+        }
+
+        .video-container {
+          width: 95%; /* Mengambil lebih banyak lebar di layar kecil */
+          max-width: 400px; /* Batasi lebar maksimal untuk tampilan nyaman */
+        }
+
+        .strip {
+          width: 95%; /* Mengambil lebih banyak lebar di layar kecil */
+          max-width: 400px; /* Sesuaikan lebar maksimal sesuai kebutuhan */
+          flex-direction: row; /* Tampilkan gambar strip secara horizontal */
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 10px;
+          padding: 10px;
+        }
+
+        .strip img {
+          width: 100px; /* Lebar tetap untuk gambar preview kecil */
+          height: auto; /* Penting untuk mempertahankan rasio aspek */
+          aspect-ratio: var(--dynamic-video-aspect-ratio); /* Tetap gunakan rasio aspek dinamis */
+        }
+
+        .controls {
+          flex-direction: column; /* Susun tombol secara vertikal */
+          gap: 15px;
+        }
+
+        button {
+          width: 90%; /* Tombol mengambil lebih banyak lebar */
+          padding: 10px 20px;
+          font-size: 1em;
+        }
+
+        .options-panel {
+          width: 95%;
+          padding: 15px;
+          margin-bottom: 20px;
+        }
+
+        /* Sesuaikan ukuran gambar stiker dan frame di mobile */
+        .sticker-selection img,
+        .frame-selection img,
+        .frame-selection button {
+          width: 50px;
+          height: 50px;
+        }
+      }
+
+      /* Tablet (layar menengah) */
+      @media (min-width: 601px) and (max-width: 992px) {
+        h1 {
+          font-size: 2.8em;
+        }
+
+        .container {
+          gap: 30px;
+        }
+
+        .video-container {
+          max-width: 500px; /* Sedikit lebih kecil dari desktop */
+        }
+
+        .strip {
+          max-width: 180px; /* Pertahankan strip lebih sempit */
+          padding: 15px;
+          gap: 15px;
+        }
+
+        .strip img {
+          width: 100%; /* Akan mengambil lebar penuh dari strip */
+          height: auto; /* Tinggi menyesuaikan untuk mempertahankan rasio aspek */
+          object-fit: contain;
+        }
+
+        .options-panel {
+          max-width: 650px;
+        }
+      }
+
+      /* Desktop (layar besar) */
+      @media (min-width: 993px) {
+        .video-container {
+          max-width: 565px; /* Lebar maksimal yang disukai di layar besar */
+        }
+        .strip {
+          max-width: 200px; /* Lebar maksimal yang disukai di layar besar */
+        }
+        .strip img {
+          width: 100%; /* Akan mengambil lebar penuh dari strip */
+          height: auto; /* Tinggi menyesuaikan untuk mempertahankan rasio aspek */
+          object-fit: contain;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PHOTO BOOTH</h1>
+
+    <div class="container">
+      <div class="video-container" id="cameraBox">
+        <video id="video" autoplay playsinline></video>
+        <img id="frameOverlay" src="frame.png" alt="frame" />
+        <img id="sticker" src="" />
+        <div id="countdown"></div>
+      </div>
+      <div class="strip" id="photoStrip">
+        <img src="" alt="Captured Photo 1" />
+        <img src="" alt="Captured Photo 2" />
+        <img src="" alt="Captured Photo 3" />
+        <img src="fixed_bottom_image.png" alt="Fixed Bottom Image" />
+        </div>
+    </div>
+
+    <div class="options-panel">
+      <h3>Pilih Stiker</h3>
+      <div class="sticker-selection" id="stickerSelection">
+        <img
+          src="stickers/sticker1.png"
+          data-sticker-id="sticker1"
+          class="selected"
+          alt="Sticker 1"
+        />
+        <img
+          src="stickers/sticker2.png"
+          data-sticker-id="sticker2"
+          alt="Sticker 2"
+        />
+        <img
+          src="stickers/sticker3.png"
+          data-sticker-id="sticker3"
+          alt="Sticker 3"
+        />
+        <img
+          src="stickers/sticker4.png"
+          data-sticker-id="sticker4"
+          alt="Sticker 4"
+        />
+        <img
+          src="stickers/sticker5.png"
+          data-sticker-id="sticker5"
+          alt="Sticker 5"
+        />
+        <img
+          src="stickers/sticker6.png"
+          data-sticker-id="sticker6"
+          alt="Sticker 6"
+        />
+        <img
+          src="stickers/sticker7.png"
+          data-sticker-id="sticker7"
+          alt="Sticker 7"
+        />
+        <img
+          src="stickers/sticker8.png"
+          data-sticker-id="sticker8"
+          alt="Sticker 8"
+        />
+        <img
+          src="stickers/sticker9.png"
+          data-sticker-id="sticker9"
+          alt="Sticker 9"
+        />
+        <img
+          src="stickers/sticker10.png"
+          data-sticker-id="sticker10"
+          alt="Sticker 10"
+        />
+        <img
+          src="stickers/sticker11.png"
+          data-sticker-id="sticker11"
+          alt="Sticker 11"
+        />
+      </div>
+
+      <h3>Pilih Frame</h3>
+      <div class="frame-selection" id="frameSelection">
+        <img
+          src="frame.png"
+          data-frame-id="frame"
+          class="selected"
+          alt="Frame Default"
+        />
+        </div>
+
+      <h3>Atur Timer Per Jepretan</h3>
+      <div class="timer-selection" id="timerSelection">
+        <button data-timer="3" class="selected">3s</button>
+        <button data-timer="5">5s</button>
+        <button data-timer="7">7s</button>
+      </div>
+      <p class="timer-info">
+        Timer saat ini: <span id="currentTimer">3</span> detik
+      </p>
+    </div>
+
+    <div class="controls">
+      <button id="start">Mulai Jepret</button>
+      <button id="nextSnap" style="display: none">
+        Jepret Selanjutnya (1/3)
+      </button>
+      <button id="download">Unduh Photostrip</button>
+    </div>
+
+    <canvas id="hiddenCanvas" style="display: none"></canvas>
+    <canvas id="downloadCanvas" style="display: none"></canvas>
+
+    <script>
+      // Dapatkan referensi ke elemen DOM
+      const video = document.getElementById("video");
+      const frameOverlay = document.getElementById("frameOverlay");
+      const sticker = document.getElementById("sticker");
+      const countdownElement = document.getElementById("countdown");
+      const photoStripImages = Array.from(
+        document.querySelectorAll("#photoStrip img")
+      );
+      const hiddenCanvas = document.getElementById("hiddenCanvas");
+      const hiddenCtx = hiddenCanvas.getContext("2d");
+      const downloadCanvas = document.getElementById("downloadCanvas");
+      const downloadCtx = downloadCanvas.getContext("2d");
+      const cameraBox = document.getElementById("cameraBox");
+      const stickerSelection = document.getElementById("stickerSelection");
+      const frameSelection = document.getElementById("frameSelection"); // Tambahan: seleksi frame
+      const timerSelection = document.getElementById("timerSelection");
+      const currentTimerDisplay = document.getElementById("currentTimer");
+      const startButton = document.getElementById("start");
+      const nextSnapButton = document.getElementById("nextSnap");
+      const downloadButton = document.getElementById("download");
+
+      // Variabel status dan konfigurasi
+      let currentCountdownTime = 3;
+      let cameraReady = false;
+      let frameLoaded = false;
+      let stickerLoaded = false;
+      let currentSnap = 0; // Melacak jepretan saat ini (0, 1, atau 2)
+      let videoActualAspectRatio = 0.5625; // Rasio aspek default 9:16 (potret). Akan diperbarui oleh JS sesuai rasio kamera.
+
+      // Konstanta untuk ukuran photostrip yang diunduh
+      const PHOTOSTRIP_FINAL_WIDTH = 565; // Lebar akhir photostrip yang diunduh
+      const PHOTOSTRIP_PADDING_TOP_BOTTOM = 30; // Padding di bagian atas dan bawah photostrip akhir
+      const PHOTOSTRIP_GAP_BETWEEN_IMAGES = 15; // Jarak antar gambar di photostrip akhir
+      const PHOTOSTRIP_IMAGE_MARGIN = 15; // Margin dari tepi photostrip ke gambar itu sendiri
+
+      let actualVideoWidth = 0;
+      let actualVideoHeight = 0;
+
+      // Variabel global untuk menyimpan area yang terlihat dari video di kanvas
+      // Ini penting untuk menempatkan stiker dan frame dengan benar tanpa distorsi.
+      let videoVisibleArea = { x: 0, y: 0, width: 0, height: 0 };
+      // Variabel global untuk menyimpan gambar ke-4 yang sudah diproses (fixed_bottom_image.png) dengan stiker
+      let processedFixedBottomImageSrc = "";
+
+      /**
+       * Menginisialisasi akses kamera pengguna.
+       * Mengatur resolusi video, rasio aspek, dan mengupdate variabel CSS.
+       */
+      function initializeCamera() {
+        // Meminta akses ke perangkat video (kamera)
+        navigator.mediaDevices
+          .getUserMedia({
+            video: {
+              width: { ideal: 1280 }, // Resolusi ideal tinggi
+              height: { ideal: 720 },
+              facingMode: "user", // Lebih suka kamera depan di perangkat mobile
+            },
+          })
+          .then((stream) => {
+            // Pasang stream video ke elemen <video>
+            video.srcObject = stream;
+            // Ketika metadata video sudah dimuat
+            video.onloadedmetadata = () => {
+              video.play(); // Putar video
+              actualVideoWidth = video.videoWidth; // Lebar native video
+              actualVideoHeight = video.videoHeight; // Tinggi native video
+              videoActualAspectRatio = actualVideoWidth / actualVideoHeight; // Hitung rasio aspek
+
+              // Update variabel CSS untuk rasio aspek dinamis
+              document.documentElement.style.setProperty(
+                "--dynamic-video-aspect-ratio",
+                videoActualAspectRatio
+              );
+
+              // Set dimensi hiddenCanvas sesuai resolusi video native
+              hiddenCanvas.width = actualVideoWidth;
+              hiddenCanvas.height = actualVideoHeight;
+
+              const canvasAspectRatio = hiddenCanvas.width / hiddenCanvas.height;
+
+              let drawWidth, drawHeight, drawX, drawY;
+
+              // Hitung area video yang benar-benar terlihat di dalam hiddenCanvas
+              // Ini penting untuk penempatan overlay yang akurat (frame dan stiker)
+              if (videoActualAspectRatio > canvasAspectRatio) {
+                // Jika video lebih lebar dari kanvas (video landscape di kanvas portrait)
+                drawHeight = hiddenCanvas.height;
+                drawWidth = hiddenCanvas.height * videoActualAspectRatio;
+                drawX = (hiddenCanvas.width - drawWidth) / 2;
+                drawY = 0;
+              } else {
+                // Jika video lebih tinggi dari kanvas (video portrait di kanvas landscape)
+                drawWidth = hiddenCanvas.width;
+                drawHeight = hiddenCanvas.width / videoActualAspectRatio;
+                drawX = 0;
+                drawY = (hiddenCanvas.height - drawHeight) / 2;
+              }
+
+              // Simpan area yang terlihat ini secara global
+              videoVisibleArea = {
+                x: drawX,
+                y: drawY,
+                width: drawWidth,
+                height: drawHeight,
+              };
+
+              console.log(
+                `[INIT] Video native resolution: ${actualVideoWidth}x${actualVideoHeight}, Aspect Ratio: ${videoActualAspectRatio.toFixed(
+                  3
+                )}`
+              );
+              console.log(
+                `[INIT] Video visible area on hiddenCanvas (to draw overlays): X:${videoVisibleArea.x.toFixed(
+                  0
+                )} Y:${videoVisibleArea.y.toFixed(0)} W:${videoVisibleArea.width.toFixed(
+                  0
+                )} H:${videoVisibleArea.height.toFixed(0)}`
+              );
+
+              // Hitung dimensi downloadCanvas secara dinamis berdasarkan rasio aspek video
+              // Ini memastikan gambar di photostrip akhir tidak distorsi
+              const PHOTOSTRIP_SINGLE_IMAGE_DISPLAY_WIDTH =
+                PHOTOSTRIP_FINAL_WIDTH - PHOTOSTRIP_IMAGE_MARGIN * 2;
+              const PHOTOSTRIP_SINGLE_IMAGE_DISPLAY_HEIGHT =
+                PHOTOSTRIP_SINGLE_IMAGE_DISPLAY_WIDTH / videoActualAspectRatio;
+
+              downloadCanvas.width = PHOTOSTRIP_FINAL_WIDTH;
+              downloadCanvas.height =
+                PHOTOSTRIP_SINGLE_IMAGE_DISPLAY_HEIGHT * 4 + // 4 gambar
+                PHOTOSTRIP_PADDING_TOP_BOTTOM * 2 + // Padding atas & bawah
+                PHOTOSTRIP_GAP_BETWEEN_IMAGES * 3; // 3 gap di antara 4 gambar
+
+              console.log(
+                `[INIT] Download canvas size (calculated): ${downloadCanvas.width}x${downloadCanvas.height}`
+              );
+              cameraReady = true; // Set status kamera siap
+              checkReadyState(); // Periksa status kesiapan aplikasi
+            };
+          })
+          .catch((err) => {
+            console.error("[INIT] Error accessing camera: ", err);
+            alert(
+              "Gagal mengakses kamera. Pastikan Anda memberikan izin dan tidak ada aplikasi lain yang menggunakan kamera. Error: " +
+                err.name
+            );
+            startButton.disabled = true; // Nonaktifkan tombol start jika kamera gagal
+          });
+      }
+
+      /**
+       * Memeriksa apakah kamera, frame, dan stiker sudah dimuat dan siap digunakan.
+       * Mengaktifkan/menonaktifkan tombol "Mulai Jepret".
+       */
+      function checkReadyState() {
+        // Aktifkan tombol start hanya jika kamera, frame, dan stiker semuanya sudah dimuat
+        if (cameraReady && frameLoaded && stickerLoaded) {
+          startButton.disabled = false;
+          console.log(
+            "[READY] Kamera, frame, dan stiker siap! Tombol 'Mulai Jepret' aktif."
+          );
+        } else {
+          startButton.disabled = true;
+          console.log("[READY] Menunggu kamera, frame, atau stiker siap...");
+        }
+      }
+
+      /**
+       * Memulai hitungan mundur visual di layar.
+       * @param {number} time - Waktu hitungan mundur dalam detik.
+       * @returns {Promise<void>} - Promise yang diselesaikan setelah hitungan mundur selesai.
+       */
+      function startCountdown(time) {
+        countdownElement.style.display = "flex"; // Tampilkan elemen hitungan mundur
+        let c = time;
+        countdownElement.innerText = c; // Tampilkan angka awal
+
+        return new Promise((res) => {
+          const interval = setInterval(() => {
+            c--; // Kurangi hitungan
+            countdownElement.innerText = c; // Update angka di layar
+            if (c === 0) {
+              clearInterval(interval); // Hentikan interval saat 0
+              countdownElement.style.display = "none"; // Sembunyikan elemen hitungan mundur
+              res(); // Selesaikan promise
+            }
+          }, 1000); // Setiap 1 detik
+        });
+      }
+
+      /**
+       * Memproses gambar fixed_bottom_image.png dengan stiker dan frame yang dipilih.
+       * Hasilnya disimpan sebagai data URL untuk digunakan di photostrip.
+       */
+      async function prepareFixedBottomImageWithSticker() {
+        const tempCanvas = document.createElement("canvas");
+        const tempCtx = tempCanvas.getContext("2d");
+
+        // Set dimensi canvas sementara agar cocok dengan resolusi video asli
+        tempCanvas.width = actualVideoWidth;
+        tempCanvas.height = actualVideoHeight;
+
+        return new Promise((resolve) => {
+          const fixedImage = new Image();
+          fixedImage.onload = () => {
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.save();
+
+            // Gambar fixed_bottom_image.png ke kanvas sementara, diskalakan agar muat di videoVisibleArea
+            // Ini agar rasio aspek gambar tetap terjaga dan mengisi area yang sama dengan foto kamera
+            tempCtx.drawImage(
+              fixedImage,
+              0,
+              0,
+              fixedImage.naturalWidth,
+              fixedImage.naturalHeight, // Dimensi gambar sumber
+              videoVisibleArea.x,
+              videoVisibleArea.y,
+              videoVisibleArea.width,
+              videoVisibleArea.height // Tujuan di tempCanvas
+            );
+
+            // Gambar stiker yang dipilih di atasnya, menggunakan logika yang sama dengan pengambilan kamera
+            if (
+              sticker.src &&
+              sticker.src !== window.location.href + "#" &&
+              sticker.src !== ""
+            ) {
+              const stickerNaturalWidth = sticker.naturalWidth;
+              const stickerNaturalHeight = sticker.naturalHeight;
+              const stickerAspectRatio =
+                stickerNaturalWidth / stickerNaturalHeight;
+
+              let stickerDrawWidth, stickerDrawHeight;
+              const stickerWidthPercentage = 0.35; // 35% dari lebar area video yang terlihat
+              stickerDrawWidth = videoVisibleArea.width * stickerWidthPercentage;
+              stickerDrawHeight = stickerDrawWidth / stickerAspectRatio;
+
+              // Pastikan tinggi stiker tidak melebihi persentase tertentu dari tinggi area terlihat
+              const stickerHeightPercentage = 0.35; // 35% dari tinggi area video yang terlihat
+              if (stickerDrawHeight > videoVisibleArea.height * stickerHeightPercentage) {
+                stickerDrawHeight = videoVisibleArea.height * stickerHeightPercentage;
+                stickerDrawWidth = stickerDrawHeight * stickerAspectRatio;
+              }
+
+              // Posisikan stiker (pojok kanan bawah dengan margin)
+              const stickerMarginRightPercentage = 0.02; // 2% margin dari kanan
+              const stickerDrawX =
+                videoVisibleArea.x +
+                videoVisibleArea.width -
+                stickerDrawWidth -
+                videoVisibleArea.width * stickerMarginRightPercentage;
+
+              const stickerMarginBottomPercentage = 0.05; // 5% margin dari bawah
+              const stickerDrawY =
+                videoVisibleArea.y +
+                videoVisibleArea.height -
+                stickerDrawHeight -
+                videoVisibleArea.height * stickerMarginBottomPercentage;
+
+              tempCtx.drawImage(
+                sticker,
+                stickerDrawX,
+                stickerDrawY,
+                stickerDrawWidth,
+                stickerDrawHeight
+              );
+            }
+
+            // Gambar frame overlay di atas semuanya untuk gambar ke-4
+            if (frameOverlay.src && frameOverlay.style.display !== "none") {
+              tempCtx.drawImage(
+                frameOverlay,
+                videoVisibleArea.x,
+                videoVisibleArea.y,
+                videoVisibleArea.width,
+                videoVisibleArea.height
+              );
+            }
+            tempCtx.restore();
+
+            // Simpan gambar yang sudah diproses sebagai data URL
+            processedFixedBottomImageSrc = tempCanvas.toDataURL("image/png");
+            resolve();
+          };
+          fixedImage.onerror = () => {
+            console.error(
+              "Gagal memuat fixed_bottom_image.png. Menggunakan versi tanpa stiker."
+            );
+            // Fallback ke sumber asli jika gagal memuat
+            processedFixedBottomImageSrc = photoStripImages[3].getAttribute("src");
+            resolve();
+          };
+          // Gunakan src asli dari HTML untuk gambar ke-4 (fixed_bottom_image.png)
+          fixedImage.src = photoStripImages[3].getAttribute("src");
+        });
+      }
+
+      /**
+       * Melakukan satu kali pengambilan gambar dari kamera, menerapkan stiker dan frame,
+       * dan menampilkannya di photostrip.
+       */
+      async function performSingleCapture() {
+        if (!cameraReady || !frameLoaded || !stickerLoaded) {
+          alert(
+            "Sistem belum siap. Pastikan kamera diizinkan dan aset (frame/stiker) sudah dimuat."
+          );
+          return;
+        }
+
+        // Nonaktifkan tombol selama proses pengambilan gambar
+        startButton.disabled = true;
+        nextSnapButton.disabled = true;
+        downloadButton.disabled = true;
+
+        // Nonaktifkan opsi selama proses pengambilan gambar
+        stickerSelection.style.pointerEvents = "none";
+        frameSelection.style.pointerEvents = "none";
+        timerSelection.style.pointerEvents = "none";
+
+        if (currentSnap < 3) {
+          // Lakukan hitungan mundur sebelum mengambil gambar
+          await startCountdown(currentCountdownTime);
+
+          // Hapus isi canvas sebelumnya
+          hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+          hiddenCtx.save();
+
+          // Isi kanvas dengan hitam untuk menangani letterboxing jika rasio aspek video tidak cocok
+          hiddenCtx.fillStyle = "black";
+          hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+
+          // Gambar video ke kanvas, dibalik secara horizontal
+          // Pastikan video mengisi 'videoVisibleArea'
+          hiddenCtx.translate(hiddenCanvas.width, 0); // Pindahkan origin ke kanan
+          hiddenCtx.scale(-1, 1); // Balik secara horizontal
+
+          hiddenCtx.drawImage(
+            video,
+            0,
+            0,
+            video.videoWidth,
+            video.videoHeight, // Sumber: seluruh frame video
+            videoVisibleArea.x * -1, // Tujuan X: perlu dibalik juga
+            videoVisibleArea.y, // Tujuan Y
+            videoVisibleArea.width, // Lebar tujuan
+            videoVisibleArea.height // Tinggi tujuan
+          );
+          hiddenCtx.restore(); // Kembalikan transformasi kanvas
+
+          // Gambar stiker yang dipilih di atas video (di dalam area video yang terlihat)
+          if (
+            sticker.src &&
+            sticker.src !== window.location.href + "#" &&
+            sticker.src !== ""
+          ) {
+            const stickerNaturalWidth = sticker.naturalWidth;
+            const stickerNaturalHeight = sticker.naturalHeight;
+            const stickerAspectRatio =
+              stickerNaturalWidth / stickerNaturalHeight;
+
+            let stickerDrawWidth, stickerDrawHeight;
+            const stickerWidthPercentage = 0.35; // Lebar stiker adalah 35% dari lebar video yang terlihat
+            stickerDrawWidth = videoVisibleArea.width * stickerWidthPercentage;
+            stickerDrawHeight = stickerDrawWidth / stickerAspectRatio;
+
+            // Pastikan tinggi stiker tidak melebihi persentase tertentu dari tinggi area terlihat
+            const stickerHeightPercentage = 0.35; // Tinggi stiker adalah 35% dari tinggi video yang terlihat
+            if (stickerDrawHeight > videoVisibleArea.height * stickerHeightPercentage) {
+                stickerDrawHeight = videoVisibleArea.height * stickerHeightPercentage;
+                stickerDrawWidth = stickerDrawHeight * stickerAspectRatio;
+            }
+
+            // Posisikan stiker (pojok kanan bawah dengan margin spesifik)
+            const stickerMarginRightPercentage = 0.02; // 2% margin dari kanan
+            const stickerDrawX =
+              videoVisibleArea.x +
+              videoVisibleArea.width -
+              stickerDrawWidth -
+              videoVisibleArea.width * stickerMarginRightPercentage;
+
+            const stickerMarginBottomPercentage = 0.05; // 5% margin dari bawah
+            const stickerDrawY =
+              videoVisibleArea.y +
+              videoVisibleArea.height -
+              stickerDrawHeight -
+              videoVisibleArea.height * stickerMarginBottomPercentage;
+
+            hiddenCtx.drawImage(
+              sticker,
+              stickerDrawX,
+              stickerDrawY,
+              stickerDrawWidth,
+              stickerDrawHeight
+            );
+          }
+
+          // Gambar overlay frame (di atas video dan stiker)
+          if (frameOverlay.src && frameOverlay.style.display !== "none") {
+            hiddenCtx.drawImage(
+              frameOverlay,
+              videoVisibleArea.x,
+              videoVisibleArea.y,
+              videoVisibleArea.width,
+              videoVisibleArea.height
+            );
+          }
+
+          // Tetapkan gambar yang diambil ke slot saat ini di preview photostrip
+          photoStripImages[currentSnap].src =
+            hiddenCanvas.toDataURL("image/png");
+
+          currentSnap++; // Tingkatkan hitungan jepretan
+
+          if (currentSnap < 3) {
+            // Jika kurang dari 3 foto diambil, tampilkan tombol "Jepret Selanjutnya"
+            nextSnapButton.innerText = `Jepret Selanjutnya (${
+              currentSnap + 1
+            }/3)`;
+            nextSnapButton.style.display = "block";
+            nextSnapButton.disabled = false;
+            // Aktifkan kembali opsi untuk jepretan berikutnya
+            stickerSelection.style.pointerEvents = "auto";
+            frameSelection.style.pointerEvents = "auto";
+            timerSelection.style.pointerEvents = "auto";
+          } else {
+            // Semua 3 pengambilan kamera sudah selesai
+            nextSnapButton.style.display = "none";
+            startButton.innerText = "Mulai Ulang"; // Ubah teks tombol menjadi "Mulai Ulang"
+            startButton.style.display = "block";
+            startButton.disabled = false;
+            downloadButton.disabled = false;
+
+            // Aktifkan kembali opsi
+            stickerSelection.style.pointerEvents = "auto";
+            frameSelection.style.pointerEvents = "auto";
+            timerSelection.style.pointerEvents = "auto";
+
+            // PENTING: Proses fixed_bottom_image.png dengan stiker dan frame di sini
+            await prepareFixedBottomImageWithSticker();
+            photoStripImages[3].src = processedFixedBottomImageSrc; // Update sumber gambar ke-4 di strip preview
+
+            console.log(
+              "[INFO] 3 foto kamera sudah diambil. Frame keempat otomatis diproses dengan stiker."
+            );
+          }
+        }
+      }
+
+      /**
+       * Memulai proses pengambilan gambar dari awal.
+       * Mengatur ulang status dan membersihkan photostrip preview.
+       */
+      function startCaptureProcess() {
+        currentSnap = 0; // Reset hitungan jepretan
+        // Bersihkan 3 slot foto pertama di strip preview
+        photoStripImages[0].src = "";
+        photoStripImages[1].src = "";
+        photoStripImages[2].src = "";
+        // Reset gambar ke-4 kembali ke sumber aslinya sampai diproses lagi
+        photoStripImages[3].src = "fixed_bottom_image.png";
+
+        startButton.style.display = "none"; // Sembunyikan tombol "Mulai"
+        nextSnapButton.style.display = "block"; // Tampilkan tombol "Jepret Selanjutnya"
+        nextSnapButton.innerText = `Jepret Selanjutnya (1/3)`;
+        nextSnapButton.disabled = false;
+        downloadButton.disabled = true; // Nonaktifkan unduh sampai semua foto diambil
+
+        performSingleCapture(); // Mulai pengambilan gambar pertama
+      }
+
+      /**
+       * Menggabungkan semua gambar di photostrip menjadi satu gambar dan mengunduhnya.
+       */
+      async function downloadPhotoStrip() {
+        // Pastikan semua 4 gambar sudah siap sebelum mengunduh
+        if (
+          photoStripImages[0].src === "" ||
+          photoStripImages[1].src === "" ||
+          photoStripImages[2].src === "" ||
+          photoStripImages[3].src === "fixed_bottom_image.png" // Periksa apakah gambar ke-4 sudah diproses
+        ) {
+          alert(
+            "Ambil semua 3 foto dari kamera dan pastikan gambar keempat sudah siap sebelum mengunduh!"
+          );
+          return;
+        }
+
+        downloadCtx.clearRect(
+          0,
+          0,
+          downloadCanvas.width,
+          downloadCanvas.height
+        );
+
+        // Atur latar belakang untuk seluruh photostrip (misalnya, putih)
+        downloadCtx.fillStyle = "#FFFFFF";
+        downloadCtx.fillRect(0, 0, downloadCanvas.width, downloadCanvas.height);
+
+        // Hitung dimensi untuk setiap gambar dalam photostrip akhir
+        const drawWidth = PHOTOSTRIP_FINAL_WIDTH - PHOTOSTRIP_IMAGE_MARGIN * 2;
+        const drawHeight = drawWidth / videoActualAspectRatio; // Pertahankan rasio aspek asli
+
+        let currentY = PHOTOSTRIP_PADDING_TOP_BOTTOM; // Mulai menggambar dari padding atas
+
+        for (let i = 0; i < 4; i++) {
+          const src = photoStripImages[i].src;
+          if (!src || src.includes("data:,")) {
+            console.warn(
+              `Gambar ke-${
+                i + 1
+              } kosong atau tidak valid, dilewati saat mengunduh.`
+            );
+            continue;
+          }
+
+          await new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              downloadCtx.drawImage(
+                img,
+                PHOTOSTRIP_IMAGE_MARGIN, // X dimulai dari margin kiri
+                currentY, // Posisi Y saat ini
+                drawWidth, // Lebar gambar dalam strip
+                drawHeight // Tinggi gambar dalam strip (rasio aspek terjaga)
+              );
+              currentY += drawHeight + PHOTOSTRIP_GAP_BETWEEN_IMAGES; // Pindahkan ke posisi Y berikutnya untuk gambar selanjutnya
+              resolve();
+            };
+            img.onerror = () => {
+              console.error(`Gagal memuat gambar untuk strip[${i}]: ${src}`);
+              resolve(); // Selesaikan promise bahkan pada error agar tidak memblokir loop
+            };
+            img.src = src;
+          });
+        }
+
+        // Buat elemen <a> untuk mengunduh gambar
+        const link = document.createElement("a");
+        link.download = "photostrip.png"; // Unduh sebagai PNG untuk kualitas lebih tinggi
+        link.href = downloadCanvas.toDataURL("image/png"); // Dapatkan data URL gambar
+        link.click(); // Klik tautan untuk memulai unduhan
+      }
+
+      // Event Listener untuk seleksi stiker
+      stickerSelection.addEventListener("click", (e) => {
+        if (e.target.tagName === "IMG") {
+          // Hapus kelas 'selected' dari semua stiker
+          Array.from(stickerSelection.children).forEach((img) =>
+            img.classList.remove("selected")
+          );
+          // Tambahkan kelas 'selected' ke stiker yang diklik
+          e.target.classList.add("selected");
+
+          stickerLoaded = false; // Reset status loaded untuk memicu checkReadyState
+          sticker.src = e.target.src; // Update stiker di live preview
+          console.log(`[INFO] Memuat stiker: ${sticker.src}`);
+        }
+      });
+
+      // Event Listener untuk seleksi frame
+      frameSelection.addEventListener("click", (e) => {
+        let targetElement = e.target;
+        if (targetElement.tagName === "IMG") {
+          // Hapus kelas 'selected' dari semua frame
+          Array.from(frameSelection.children).forEach((el) =>
+            el.classList.remove("selected")
+          );
+          // Tambahkan kelas 'selected' ke frame yang diklik
+          targetElement.classList.add("selected");
+
+          const selectedFrameId = targetElement.dataset.frameId;
+
+          frameOverlay.style.display = "block"; // Pastikan frame terlihat
+          frameOverlay.src = `${selectedFrameId}.png`; // Set gambar frame
+          frameLoaded = false; // Reset status loaded
+          console.log(`[INFO] Memuat frame: ${frameOverlay.src}`);
+
+          checkReadyState(); // Periksa kembali status kesiapan setelah frame berubah
+        }
+      });
+
+      // Event Listener untuk seleksi timer
+      timerSelection.addEventListener("click", (e) => {
+        if (e.target.tagName === "BUTTON") {
+          // Hapus kelas 'selected' dari semua tombol timer
+          Array.from(timerSelection.children).forEach((btn) =>
+            btn.classList.remove("selected")
+          );
+          // Tambahkan kelas 'selected' ke tombol timer yang diklik
+          e.target.classList.add("selected");
+
+          currentCountdownTime = parseInt(e.target.dataset.timer); // Ambil nilai timer
+          currentTimerDisplay.innerText = currentCountdownTime; // Update tampilan timer
+          console.log(`Timer diatur ke ${currentCountdownTime} detik.`);
+        }
+      });
+
+      // Handler klik tombol
+      startButton.onclick = startCaptureProcess;
+      downloadButton.onclick = downloadPhotoStrip;
+      nextSnapButton.onclick = performSingleCapture;
+
+      // Setup awal saat jendela dimuat
+      window.onload = () => {
+        // Atur frame default (asumsi 'frame.png' adalah default dan ada)
+        const defaultFrame = document.querySelector(
+          '.frame-selection img[data-frame-id="frame"]'
+        );
+        if (defaultFrame) {
+          frameOverlay.src = defaultFrame.src;
+          frameOverlay.onload = () => {
+            frameLoaded = true;
+            console.log(
+              `[INIT] Default frame loaded. Natural size: ${frameOverlay.naturalWidth}x${frameOverlay.naturalHeight}`
+            );
+            checkReadyState();
+          };
+          frameOverlay.onerror = () => {
+            console.error("[INIT] Gagal memuat overlay frame default.");
+            frameLoaded = true; // Tetap set ke true agar aplikasi tidak terblokir
+            checkReadyState();
+          };
+        } else {
+          frameLoaded = true; // Jika tidak ada frame default, asumsikan dimuat
+          checkReadyState();
+        }
+
+        // Atur stiker default
+        const defaultSticker = document.querySelector(
+          ".sticker-selection img.selected"
+        );
+        if (defaultSticker) {
+          sticker.src = defaultSticker.src;
+          sticker.onload = () => {
+            stickerLoaded = true;
+            console.log(
+              `[INIT] Default sticker loaded. Natural size: ${sticker.naturalWidth}x${sticker.naturalHeight}`
+            );
+            checkReadyState();
+          };
+          sticker.onerror = () => {
+            console.error("[INIT] Gagal memuat stiker default.");
+            stickerLoaded = true; // Tetap set ke true agar aplikasi tidak terblokir
+            checkReadyState();
+          };
+        } else {
+          stickerLoaded = true; // Jika tidak ada stiker default, asumsikan dimuat
+          checkReadyState();
+        }
+
+        initializeCamera(); // Inisialisasi kamera setelah aset mulai dimuat
+      };
+
+      // Pastikan status awal tombol sudah benar bahkan jika halaman dimuat dari cache
+      checkReadyState();
+    </script>
+  </body>
+</html>
